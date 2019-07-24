@@ -1,9 +1,3 @@
-# Copyright 2018 Canaan Inc.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
@@ -11,17 +5,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 #include "encoding.h"
-
 # define LREG ld
 # define SREG sd
 # define LFREG flw
 # define SFREG fsw
 # define REGBYTES 8
 # define STKSHIFT 15
-
-
 .section .text.start, "ax", @progbits
 .globl _start
 _start:
@@ -39,7 +29,6 @@ _start:
   csrw mip, 0
   la t0, trap_entry
   csrw mtvec, t0
-
   li  x1, 0
   li  x2, 0
   li  x3, 0
@@ -71,10 +60,8 @@ _start:
   li  x29,0
   li  x30,0
   li  x31,0
-
   li t0, MSTATUS_FS
   csrs mstatus, t0
-
   fssr    x0
   fmv.w.x f0, x0
   fmv.w.x f1, x0
@@ -108,7 +95,6 @@ _start:
   fmv.w.x f29,x0
   fmv.w.x f30,x0
   fmv.w.x f31,x0
-
   .option push
   .option norelax
    la gp, __global_pointer$
@@ -116,17 +102,44 @@ _start:
   la  tp, _end + 63
   and tp, tp, -64
   csrr a0, mhartid
-
   add sp, a0, 1
   sll sp, sp, STKSHIFT
   add sp, sp, tp
-
   j _init_bsp
-
   .globl trap_entry
   .type trap_entry, @function
   .align 2
 trap_entry:
+  addi sp, sp, -REGBYTES
+  sd t0, 0x0(sp)
+  csrr t0, mcause
+  bgez t0, .handle_other
+  # Test soft interrupt
+  slli t0, t0, 1
+  addi t0, t0, -(IRQ_M_SOFT << 1)
+  bnez t0, .handle_other
+  # Interupt is soft interrupt
+  # Get event
+  addi sp, sp, -REGBYTES
+  sd t1, 0x0(sp)
+  la   t0, g_core_pending_switch
+  csrr t1, mhartid
+  slli t1, t1, 3
+  add  t0, t0, t1
+  ld t1, 0x0(sp)
+  addi sp, sp, REGBYTES
+  # Test ContextSwitch event
+  ld   t0, 0x0(t0)
+  beqz t0, .handle_other
+
+  ld t0, 0x0(sp)
+  addi sp, sp, REGBYTES
+  # Do not use jal here
+  j    xPortSysTickInt
+  mret
+.handle_other:
+  ld   t0, 0x0(sp)
+  addi sp, sp, REGBYTES
   addi sp, sp, -64*REGBYTES
 
   SREG x1, 1*REGBYTES(sp)
@@ -160,7 +173,6 @@ trap_entry:
   SREG x29, 29*REGBYTES(sp)
   SREG x30, 30*REGBYTES(sp)
   SREG x31, 31*REGBYTES(sp)
-
   SFREG f0, ( 0  + 32)*REGBYTES(sp)
   SFREG f1, ( 1  + 32)*REGBYTES(sp)
   SFREG f2, ( 2  + 32)*REGBYTES(sp)
@@ -193,7 +205,6 @@ trap_entry:
   SFREG f29,( 29 + 32)*REGBYTES(sp)
   SFREG f30,( 30 + 32)*REGBYTES(sp)
   SFREG f31,( 31 + 32)*REGBYTES(sp)
-
   csrr a0, mcause
   csrr a1, mepc
   mv a2, sp
@@ -237,7 +248,6 @@ trap_entry:
   LREG x29, 29*REGBYTES(sp)
   LREG x30, 30*REGBYTES(sp)
   LREG x31, 31*REGBYTES(sp)
-
   LFREG f0, ( 0  + 32)*REGBYTES(sp)
   LFREG f1, ( 1  + 32)*REGBYTES(sp)
   LFREG f2, ( 2  + 32)*REGBYTES(sp)
@@ -270,19 +280,14 @@ trap_entry:
   LFREG f29,( 29 + 32)*REGBYTES(sp)
   LFREG f30,( 30 + 32)*REGBYTES(sp)
   LFREG f31,( 31 + 32)*REGBYTES(sp)
-
   addi sp, sp, 64*REGBYTES
   mret
-
 .section ".tdata.begin"
 .globl _tdata_begin
 _tdata_begin:
-
 .section ".tdata.end"
 .globl _tdata_end
 _tdata_end:
-
 .section ".tbss.end"
 .globl _tbss_end
 _tbss_end:
-
